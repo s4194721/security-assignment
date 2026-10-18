@@ -49,6 +49,7 @@ nonce = secrets.token_bytes(12)
 
 #Encrypting using AES-GCM
 aes = AESGCM(aes_key)
+
 ciphertext = aes.encrypt(nonce, plaintext, None)
 
 (BASE / "task2.encrypted").write_bytes(nonce + ciphertext)

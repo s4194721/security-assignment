@@ -1,5 +1,5 @@
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 
 from pathlib import Path
 import secrets
@@ -41,22 +41,43 @@ if (
     raise ValueError("Plaintext must contain at least 3 English letters.")
 
 # Check whether a number is prime
-def is_prime(n):
+
+# Miller-Rabin primality test
+def is_prime(n, rounds=40):
     if n < 2:
         return False
 
-    if n == 2:
-        return True
+    small_primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37]
 
-    if n % 2 == 0:
-        return False
-
-    divisor = 3
-
-    while divisor * divisor <= n:
-        if n % divisor == 0:
+    for prime in small_primes:
+        if n == prime:
+            return True
+        if n % prime == 0:
             return False
-        divisor += 2
+
+    # Express n - 1 as d * 2^s
+    d = n - 1
+    s = 0
+
+    while d % 2 == 0:
+        d //= 2
+        s += 1
+
+    # Perform Miller-Rabin testing
+    for _ in range(rounds):
+        a = secrets.randbelow(n - 3) + 2
+        x = pow(a, d, n)
+
+        if x == 1 or x == n - 1:
+            continue
+
+        for _ in range(s - 1):
+            x = pow(x, 2, n)
+
+            if x == n - 1:
+                break
+        else:
+            return False
 
     return True
 
@@ -68,36 +89,9 @@ if not is_prime(p):
 if not is_prime(q):
     raise ValueError("Prime 2 is not a prime number.")
 
-print("\nInput validation successful!")
+print("Input validation successful!")
 print("Both numbers are prime.")
 
-
-# Step 7: Generate RSA keys
-e = 65537
-
-# Calculate RSA modulus
-n = p * q
-
-# Calculate Euler's totient
-phi = (p - 1) * (q - 1)
-
-# Check whether e and phi are coprime
-if math.gcd(e, phi) != 1:
-    raise ValueError("Invalid primes for the selected public exponent.")
-
-# Calculate private exponent
-d = pow(e, -1, phi)
-
-# Store RSA keys
-public_key = (e, n)
-private_key = (d, n)
-
-print("\nRSA Key Generation:")
-print("Public Key:", public_key)
-print("Private Key:", private_key)
-
-# Verify RSA key relationship
-print("Key Verification:", (e * d) % phi == 1)
 
 
 # Step 11: Generate secure RSA keys
@@ -108,7 +102,21 @@ secure_private_key = rsa.generate_private_key(
 
 secure_public_key = secure_private_key.public_key()
 
-print("\nSecure RSA key pair generated successfully!")
+# Save the secure RSA private key for later decryption
+private_key_path = BASE / "rsa_private.pem"
+
+private_key_bytes = secure_private_key.private_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PrivateFormat.PKCS8,
+    encryption_algorithm=serialization.NoEncryption()
+)
+
+private_key_path.write_bytes(private_key_bytes)
+
+print("Private key saved to:", private_key_path)
+
+
+print("Secure RSA key pair generated successfully!")
 print("RSA key size:", secure_public_key.key_size, "bits")
 
 
@@ -153,3 +161,41 @@ if decrypted_message == plaintext:
     print("SUCCESS: Secure encryption and decryption worked!")
 else:
     print("FAILED: Decrypted message does not match!")
+
+
+# Step 15: Save the RSA public key and ciphertext
+
+# Extract public key numbers
+public_numbers = secure_public_key.public_numbers()
+
+secure_e = public_numbers.e
+secure_n = public_numbers.n
+
+# Convert encrypted bytes into an integer
+ciphertext_int = int.from_bytes(ciphertext, "big")
+
+# Generate initials from the name
+initials = (
+    first_name[0] + last_name[0]
+).upper()
+
+# Save the public key
+key_path = BASE / "key.txt"
+
+key_path.write_text(
+    f"({secure_e}, {secure_n})",
+    encoding="utf-8"
+)
+
+# Save ciphertext and initials
+cipher_path = BASE / "cipher.txt"
+
+cipher_path.write_text(
+    f"{ciphertext_int}\n{initials}",
+    encoding="utf-8"
+)
+
+print("\nFiles generated successfully!")
+print("Public key saved to:", key_path)
+print("Ciphertext saved to:", cipher_path)
+print("Initials:", initials)
